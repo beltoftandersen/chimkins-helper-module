@@ -8,7 +8,7 @@ _logger = logging.getLogger(__name__)
 class StockPicking(models.Model):
     _inherit = "stock.picking"
 
-    def _action_done(self):
+    def _action_done(self, *args, **kwargs):
         """Override _action_done to prevent automatic assignment of
         SO deliveries upon validating PO receipts. Then, after sending
         confirmation email, force-assign the deliveries only if the SO
@@ -25,7 +25,8 @@ class StockPicking(models.Model):
                 picking.move_ids.write({'restrict_partner_id': picking.owner_id.id})
                 picking.move_line_ids.write({'owner_id': picking.owner_id.id})
 
-        todo_moves._action_done(cancel_backorder=self.env.context.get('cancel_backorder'))
+        cancel_backorder = kwargs.get('cancel_backorder', self.env.context.get('cancel_backorder'))
+        todo_moves._action_done(cancel_backorder=cancel_backorder)
 
         self.write({'date_done': fields.Datetime.now(), 'priority': '0'})
 
@@ -49,7 +50,9 @@ class StockPicking(models.Model):
     def assign_deliveries_for_paid_so_self(self):
         _logger.info("Executing assign_deliveries_for_paid_so() for pickings: %s", self.ids)
 
-        product_ids = self.move_line_ids.filtered(lambda ml: ml.qty_done > 0).mapped('product_id').ids
+        product_ids = self.move_line_ids.filtered(
+            lambda ml: getattr(ml, 'quantity', getattr(ml, 'qty_done', 0)) > 0
+        ).mapped('product_id').ids
         if not product_ids:
             _logger.info("No products were received in this picking. Exiting function.")
             return  
@@ -104,4 +107,3 @@ class StockPicking(models.Model):
                 )
                 picking.action_assign()
                 _logger.info("After action_assign(), picking %s is in state: '%s'", picking.id, picking.state)
-
