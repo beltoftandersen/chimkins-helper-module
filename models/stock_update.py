@@ -139,10 +139,10 @@ class StockQuant(models.Model):
 class StockMove(models.Model):
     _inherit = 'stock.move'
 
-    def _action_done(self, cancel_backorder=False):
+    def _action_done(self, *args, **kwargs):
         """Trigger webhook on move completion"""
         _logger.info(f"Stock move _action_done called for moves: {self.ids}")
-        result = super()._action_done(cancel_backorder)
+        result = super()._action_done(*args, **kwargs)
 
         affected_products = self.mapped('product_id').filtered(
             lambda p: p.type == 'product' and p.sale_ok
@@ -160,7 +160,7 @@ class StockMove(models.Model):
             lambda p: p.type == 'product' and p.sale_ok
         )
 
-        result = super()._action_assign()
+        result = super()._action_assign(force_qty, *args, **kwargs)
         
         will_be_done = any(move.state == 'assigned' and move.picking_id.state == 'assigned' for move in self)
         
