@@ -1,0 +1,35 @@
+<odoo>
+    <record id="view_account_payment_register_form_custom" model="ir.ui.view">
+        <field name="name">account.payment.register.form.custom</field>
+        <field name="model">account.payment.register</field>
+        <field name="inherit_id" ref="account.view_account_payment_register_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='communication']" position="after">
+                <field name="custom_payment_ref"/>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="view_account_payment_form_add_custom_ref" model="ir.ui.view">
+        <field name="name">account.payment.form.add.custom.ref</field>
+        <field name="model">account.payment</field>
+        <field name="inherit_id" ref="account.view_account_payment_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='ref']" position="after">
+                <field name="custom_payment_ref" string="Payment Ref."/>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="view_account_payment_tree_add_custom_ref" model="ir.ui.view">
+        <field name="name">account.payment.tree.add.custom.ref</field>
+        <field name="model">account.payment</field>
+        <field name="inherit_id" ref="account.view_account_payment_tree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='partner_id']" position="after">
+                <field name="custom_payment_ref" string="Payment Ref."/>
+            </xpath>
+        </field>
+    </record>
+</odoo>
+
