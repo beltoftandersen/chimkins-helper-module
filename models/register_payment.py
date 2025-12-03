@@ -15,7 +15,7 @@ class PaymentRegister(models.Model):
     custom_payment_ref = fields.Char(string="Payment ref.")
 
     @api.model
-    def register_payment(self, invoice_id, journal_id, payment_ref=None):
+    def register_payment(self, invoice_id, journal_id, payment_ref=None, payment_date=None):
         try:
             invoice = self.env['account.move'].browse(invoice_id)
             if not invoice.exists():
@@ -35,6 +35,11 @@ class PaymentRegister(models.Model):
             payment_register_vals = {
                 'journal_id': journal.id,
             }
+
+            if payment_date:
+                payment_register_vals['payment_date'] = payment_date
+                _logger.info(f"Using payment date: {payment_date}")
+
             if hasattr(self.env['account.payment.register'], 'custom_payment_ref') and payment_ref:
                 payment_register_vals['custom_payment_ref'] = payment_ref
 
@@ -154,5 +159,3 @@ class SaleOrder(models.Model):
             raise UserError(
                 _("Failed to check stock before setting delivery to 'assigned'.\nError: %s") % e
             )
-
-
