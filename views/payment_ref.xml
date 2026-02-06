@@ -15,8 +15,10 @@
         <field name="model">account.payment</field>
         <field name="inherit_id" ref="account.view_account_payment_form"/>
         <field name="arch" type="xml">
-            <xpath expr="//field[@name='payment_reference' or @name='ref']" position="after">
-                <field name="custom_payment_ref" string="Payment Ref."/>
+            <xpath expr="//sheet" position="inside">
+                <group string="Payment Reference">
+                    <field name="custom_payment_ref" string="Payment Ref."/>
+                </group>
             </xpath>
         </field>
     </record>
