@@ -16,7 +16,7 @@ class ProductPricelist(models.Model):
     _inherit = 'product.pricelist'
 
     @api.model
-    def get_prices_for_skus(self, pricelist_id, skus, qty=1.0):
+    def get_prices_for_skus(self, pricelist_id, skus, quantity=1.0):
         """Return pricelist prices for the given SKUs.
 
         Returns a list of dicts:
@@ -48,7 +48,7 @@ class ProductPricelist(models.Model):
         if not products:
             return []
 
-        prices = self._compute_prices(pricelist, products, float(qty))
+        prices = self._compute_prices(pricelist, products, float(quantity))
 
         # Group by SKU first: two variants can legitimately share a
         # default_code, and the caller should see both rather than one
@@ -75,7 +75,7 @@ class ProductPricelist(models.Model):
         return result
 
     @api.model
-    def _compute_prices(self, pricelist, products, qty):
+    def _compute_prices(self, pricelist, products, quantity):
         """Call whichever private pricing API the installed version has.
 
         Both paths go through _compute_price_rule, so every compute_price
@@ -83,8 +83,8 @@ class ProductPricelist(models.Model):
         list_price or on another pricelist.
         """
         if hasattr(pricelist, '_get_products_price'):
-            return pricelist._get_products_price(products, qty)
+            return pricelist._get_products_price(products, quantity)
         return {
-            product.id: pricelist._get_product_price(product, qty)
+            product.id: pricelist._get_product_price(product, quantity)
             for product in products
         }
