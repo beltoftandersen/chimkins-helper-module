@@ -10,3 +10,4 @@ from . import register_payment
 from . import hold_state
 from . import custom_fields
 from . import stock_update
+from . import pricelist_api

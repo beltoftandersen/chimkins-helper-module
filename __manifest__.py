@@ -13,7 +13,7 @@
     'category': 'Technical',
     'version': '1.1',
 
-    'depends': ['base', 'sale', 'stock'],
+    'depends': ['base', 'product', 'sale', 'stock'],
     'data': [
         'views/fields.xml',
         'views/payment_ref.xml',
