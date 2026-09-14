@@ -20,10 +20,18 @@ class ProductPricelist(models.Model):
         """Return pricelist prices for the given SKUs.
 
         Returns a list of dicts:
-          [{"default_code": "ABC-1", "product_id": 42, "price": 12.34}, ...]
+          [{"default_code": "ABC-1", "product_id": 42, "price": 12.34,
+            "rule_id": 57}, ...]
 
         A list is required rather than a dict keyed by product_id, because
         XML-RPC cannot marshal integer dict keys.
+
+        rule_id is the product.pricelist.item that determined the price,
+        or False when no rule matched and Odoo fell through to list_price.
+        That distinction is the caller's to interpret: on a pricelist of
+        per-product rules a fall-through means "this product has no price
+        here", while on a pricelist whose global rule is meant to cover
+        everything it is perfectly normal.
 
         Prices exclude tax and are returned unrounded -- the middleware
         handles tax conversion and quantizes to 2dp itself. SKUs with no
@@ -48,7 +56,7 @@ class ProductPricelist(models.Model):
         if not products:
             return []
 
-        prices = self._compute_prices(pricelist, products, float(quantity))
+        priced = self._compute_price_rules(pricelist, products, float(quantity))
 
         # Group by SKU first: two variants can legitimately share a
         # default_code, and the caller should see both rather than one
@@ -66,25 +74,37 @@ class ProductPricelist(models.Model):
             for product in by_code.get(sku, ()):
                 # Skip rather than defaulting to 0.0 -- a silent zero here
                 # would be published to WooCommerce as a real price.
-                if product.id in prices:
+                if product.id in priced:
+                    price, rule_id = priced[product.id]
                     result.append({
                         'default_code': sku,
                         'product_id': product.id,
-                        'price': prices[product.id],
+                        'price': price,
+                        'rule_id': rule_id,
                     })
         return result
 
     @api.model
-    def _compute_prices(self, pricelist, products, quantity):
-        """Call whichever private pricing API the installed version has.
+    def _compute_price_rules(self, pricelist, products, quantity):
+        """Return {product_id: (price, rule_id)} for the installed version.
 
-        Both paths go through _compute_price_rule, so every compute_price
-        mode is honoured -- fixed, percentage and formula, based on
-        list_price or on another pricelist.
+        Taken from the price-and-rule API rather than pricing and then
+        looking the rule up separately, so the two can never disagree.
+        Every compute_price mode is honoured -- fixed, percentage and
+        formula, based on list_price or on another pricelist -- and
+        rule_id is False where nothing matched.
         """
-        if hasattr(pricelist, '_get_products_price'):
-            return pricelist._get_products_price(products, quantity)
+        if hasattr(pricelist, '_compute_price_rule'):
+            computed = pricelist._compute_price_rule(products, quantity)
+            # Tolerate a longer tuple: some versions carry extra trailing
+            # elements, and only the first two are ours.
+            return {
+                product_id: (values[0], values[1])
+                for product_id, values in computed.items()
+            }
         return {
-            product.id: pricelist._get_product_price(product, quantity)
+            product.id: tuple(
+                pricelist._get_product_price_rule(product, quantity)
+            )[:2]
             for product in products
         }
