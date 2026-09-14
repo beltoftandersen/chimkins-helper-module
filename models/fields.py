@@ -128,6 +128,34 @@ class AccountMove(models.Model):
             else:
                 order.woocommerce_order_link = ''
 
+class ResPartner(models.Model):
+    _inherit = 'res.partner'
+
+    zerolang_lang = fields.Char(
+        string="WooCommerce Language",
+        copy=False,
+        help="The locale the shopper checked out in, as WooCommerce's "
+             "ZeroLang plugin recorded it in the order meta key "
+             "_zerolang_lang -- e.g. pt_PT, en_GB, es_ES. Written by the "
+             "OdooWoo sync; not maintained here.",
+    )
+    # Deliberately plain: no default, no compute, and NOT validated against
+    # res.lang.
+    #
+    # No default or compute, because the sync omits the field entirely for
+    # an order that carried no _zerolang_lang, and an ordinary write then
+    # leaves any existing value untouched. Filling one in here would
+    # invent a locale the shopper never chose.
+    #
+    # Not validated, because the store may send a locale that is not
+    # installed in Odoo, and rejecting it would fail the whole order sync
+    # over a field nothing depends on.
+    #
+    # Not readonly at the FIELD level either -- that is a UI concern and
+    # the view sets it -- so the integration user can still write it over
+    # XML-RPC.
+
+
 class StockMove(models.Model):
     _inherit = 'stock.move'
 
