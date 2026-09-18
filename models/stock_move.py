@@ -1,6 +1,5 @@
 from odoo import models, fields, api
 import requests
-from odoo.exceptions import UserError
 import logging
 
 logger = logging.getLogger(__name__)
@@ -44,13 +43,16 @@ class StockPicking(models.Model):
         if self.woocommerce_webhook_sent:
             return
 
-        # Get all pickings with the same WooCommerce order and of relevant type
+        # Get all pickings with the same WooCommerce order and of relevant type.
+        # Cancelled pickings are excluded: they never reach 'done', so leaving
+        # them in would block the webhook for this order forever.
         related_pickings = self.search([
             ('woocommerce_order_id', '=', self.woocommerce_order_id),
             ('picking_type_id.code', 'in', ['outgoing', 'direct']),
+            ('state', '!=', 'cancel'),
         ])
         # Check if all these pickings are done
-        if all(p.state == 'done' for p in related_pickings):
+        if related_pickings and all(p.state == 'done' for p in related_pickings):
             self._send_woocommerce_webhook()
             # Mark all related pickings (or the order) as webhook sent
             related_pickings.write({'woocommerce_webhook_sent': True})
@@ -62,7 +64,7 @@ class StockPicking(models.Model):
         api_key = self.env['ir.config_parameter'].sudo().get_param('webhook_api_key', default='')
         if not api_key:
             logger.warning("No global API key found for webhook. Webhook not sent.")
-            raise UserError("Webhook API key is not configured.")
+            return
 
         url = self.env['ir.config_parameter'].sudo().get_param('webhook_change_status', default='')
         if not url:
