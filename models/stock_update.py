@@ -7,6 +7,15 @@ from odoo.tools import config
 
 _logger = logging.getLogger(__name__)
 
+# Locations reported individually in the payload's by_location map, as
+# comma-separated ids in ir.config_parameter. Market - official and
+# Partnerships are internal but parentless and warehouse-less, so Odoo's
+# default (no location context) deliberately excludes them -- that is what
+# keeps their stock out of the shops. Naming them here reports them
+# alongside the warehouse figure without changing what the default means.
+STOCK_LOCATIONS_PARAM = 'webhook_stock_locations'
+DEFAULT_STOCK_LOCATION_IDS = (8,)  # WH/Stock
+
 class StockQuant(models.Model):
     _inherit = 'stock.quant'
     @api.model
@@ -76,6 +85,60 @@ class StockQuant(models.Model):
         return False
 
     @api.model
+    def _get_webhook_location_ids(self):
+        """Location ids to report separately, from ir.config_parameter.
+
+        Comma-separated, e.g. "8,309,310". Falls back to WH/Stock alone
+        when unset or unparseable: a bad value must not cost the payload
+        its per-location figures, let alone break the stock webhook.
+        """
+        raw = self.env['ir.config_parameter'].sudo().get_param(
+            STOCK_LOCATIONS_PARAM, default=''
+        )
+        location_ids = []
+        for chunk in (raw or '').split(','):
+            chunk = chunk.strip()
+            if not chunk:
+                continue
+            try:
+                location_ids.append(int(chunk))
+            except (TypeError, ValueError):
+                _logger.warning(
+                    "Ignoring non-numeric id %r in %s", chunk, STOCK_LOCATIONS_PARAM
+                )
+        return location_ids or list(DEFAULT_STOCK_LOCATION_IDS)
+
+    @api.model
+    def _get_stock_by_location(self, products, location_ids):
+        """{location_id_as_str: {product_id: figures}} for the given locations.
+
+        The whole recordset is scoped once per location rather than each
+        product individually: qty_available computes in batch, so this is
+        one pass per location instead of one per product per location.
+
+        Keys are strings because the payload is JSON. A location that
+        cannot be read is skipped with a warning rather than losing the
+        others, or the webhook.
+        """
+        by_location = {}
+        for location_id in location_ids:
+            try:
+                scoped = products.with_context(location=location_id)
+                by_location[str(location_id)] = {
+                    product.id: {
+                        'on_hand': product.qty_available,
+                        'forecast': product.virtual_available,
+                        'available': product.qty_available - product.outgoing_qty,
+                    }
+                    for product in scoped
+                }
+            except Exception as e:
+                _logger.warning(
+                    "Stock webhook: skipping location %s: %s", location_id, str(e)
+                )
+        return by_location
+
+    @api.model
     def _send_stock_webhook(self, products):
         """Send computed stock via webhook - optimized version"""
         if not products:
@@ -91,6 +154,13 @@ class StockQuant(models.Model):
             if not webhook_url:
                 return
 
+            # Unchanged: the top-level figures below stay exactly as they
+            # were, so anything reading the payload today keeps working and
+            # can fall back to them when by_location is absent.
+            by_location = self._get_stock_by_location(
+                products, self._get_webhook_location_ids()
+            )
+
             stock_data = []
             for product in products:
                 on_hand = product.qty_available
@@ -103,7 +173,12 @@ class StockQuant(models.Model):
                     'product_name': product.name,
                     'on_hand': on_hand,
                     'forecast': forecast,
-                    'available': available
+                    'available': available,
+                    'by_location': {
+                        location_key: figures[product.id]
+                        for location_key, figures in by_location.items()
+                        if product.id in figures
+                    }
                 })
 
             payload = {
