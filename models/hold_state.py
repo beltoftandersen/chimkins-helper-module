@@ -30,7 +30,10 @@ class StockPicking(models.Model):
 
         self.write({'date_done': fields.Datetime.now(), 'priority': '0'})
 
-        self._send_confirmation_email()
+        # A POS sale is validated automatically with the customer standing
+        # there, so the middleware asks for no confirmation email.
+        if not self.env.context.get('skip_delivery_email'):
+            self._send_confirmation_email()
 
         if self.picking_type_id.code == 'incoming' and self.origin and self.origin.startswith("P"):
             _logger.info(
