@@ -35,17 +35,24 @@ class StockPicking(models.Model):
         if not self.env.context.get('skip_delivery_email'):
             self._send_confirmation_email()
 
-        if self.picking_type_id.code == 'incoming' and self.origin and self.origin.startswith("P"):
-            _logger.info(
-                "Picking %s is a Purchase Order receipt (%s). Running assign_deliveries_for_paid_so_self().",
-                self.name, self.origin
-            )
-            self.assign_deliveries_for_paid_so_self()
-        else:
-            _logger.info(
-                "Skipping assign_deliveries_for_paid_so_self() for Picking %s (%s). Not a PO receipt.",
-                self.name, self.origin
-            )
+        # Per picking, not per recordset. _action_done is handed every picking
+        # being validated at once, so reading self.name or self.origin here
+        # raised "Expected singleton" the moment anyone validated more than one
+        # transfer - and on a mixed batch the receipt check would otherwise
+        # have been decided once for all of them instead of one at a time.
+        for picking in self:
+            if (picking.picking_type_id.code == 'incoming'
+                    and picking.origin and picking.origin.startswith("P")):
+                _logger.info(
+                    "Picking %s is a Purchase Order receipt (%s). Running assign_deliveries_for_paid_so_self().",
+                    picking.name, picking.origin
+                )
+                picking.assign_deliveries_for_paid_so_self()
+            else:
+                _logger.info(
+                    "Skipping assign_deliveries_for_paid_so_self() for Picking %s (%s). Not a PO receipt.",
+                    picking.name, picking.origin
+                )
 
         return True
 
