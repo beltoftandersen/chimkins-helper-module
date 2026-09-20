@@ -119,37 +119,48 @@ class SaleOrder(models.Model):
             for order in self:
                 _logger.info(f"[reset_first_delivery_to_assigned] Processing Sale Order: {order.name} (ID: {order.id})")
 
+                # Every open picking, not just the first "waiting" one. The old
+                # search took one picking and wrote {"state": "assigned"} onto
+                # it directly. That set the stored column without reserving
+                # anything, so the record claimed Ready while its moves stayed
+                # waiting - and in a two-step warehouse the first waiting
+                # picking is WH/OUT, which is chained to the pick and must NOT
+                # be Ready until that pick is validated.
+                #
+                # action_assign reserves for real and lets Odoo compute the
+                # state. A picking that cannot be reserved simply stays as it
+                # is, which is the honest answer.
                 pickings = self.env["stock.picking"].search([
                     ("origin", "=", order.name),
-                    ("state", "=", "waiting")
-                ], order="id asc", limit=1)
+                    ("state", "not in", ["done", "cancel"]),
+                ], order="id asc")
 
                 if not pickings:
-                    _logger.info(f"No 'Waiting' pickings found for {order.name}.")
+                    _logger.info(f"No open pickings found for {order.name}.")
                     continue
 
-                picking = pickings[0]
+                for picking in pickings:
+                    before = picking.state
+                    picking.action_assign()
+                    picking.invalidate_recordset(["state"])
+                    after = picking.state
 
-                _logger.info(f"Checking stock availability for '{picking.name}'.")
+                    if after == before:
+                        _logger.info(
+                            f"Picking '{picking.name}' unchanged after reservation "
+                            f"(state: {after})."
+                        )
+                        continue
 
-                all_products_available = all(
-                    move.product_id.qty_available >= move.product_uom_qty
-                    for move in picking.move_ids_without_package
-                )
-
-                if all_products_available:
-                    picking.write({"state": "assigned"})
-                    _logger.info(f"Stock is available! Picking '{picking.name}' is now Ready (assigned).")
-                    picking.message_post(
-                        body=_("Delivery was set to 'Ready' because stock is available."),
-                        subtype_xmlid="mail.mt_note"
+                    _logger.info(
+                        f"Picking '{picking.name}' moved from '{before}' to '{after}' "
+                        f"after reserving."
                     )
-                else:
-                    _logger.warning(f"Not enough stock for '{picking.name}'. Keeping it in 'Waiting'.")
-                    picking.message_post(
-                        body=_("Delivery remains in 'Waiting' due to insufficient stock."),
-                        subtype_xmlid="mail.mt_note"
-                    )
+                    if after == "assigned":
+                        picking.message_post(
+                            body=_("Delivery is Ready: stock was reserved."),
+                            subtype_xmlid="mail.mt_note"
+                        )
 
             _logger.info("[reset_first_delivery_to_assigned] Finished processing all 'Waiting' pickings.")
             return True
