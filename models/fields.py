@@ -92,6 +92,7 @@ class AccountMove(models.Model):
         string="WooCommerce Order ID",
         help="The WooCommerce Order ID associated with this invoice.",
         index=True,
+        copy=False,
     )
 
     woocommerce_url = fields.Char(
@@ -103,6 +104,7 @@ class AccountMove(models.Model):
     woocommerce_refund_id = fields.Char(
         string="WooCommerce Refund ID", 
         index=True,
+        copy=False,
     )
 
     woocommerce_order_link = fields.Html(
