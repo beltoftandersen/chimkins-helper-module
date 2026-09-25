@@ -1,6 +1,7 @@
 # custom_addons/helper_module/models/complete_deliveries.py
 
 from odoo import models, _
+from odoo.tools.float_utils import float_compare
 import logging
 
 _logger = logging.getLogger(__name__)
@@ -43,6 +44,31 @@ class SaleOrder(models.Model):
                     skipped.append(picking.name)
                     continue
 
+                # Ready is not the same as every line reserved. A picking can
+                # sit in "assigned" while individual moves have nothing behind
+                # them, and assign_deliveries_for_paid_so used to force that
+                # state without reserving at all. Validating then shipped what
+                # was reserved and cancelled the rest, so a customer who had
+                # been invoiced for ten units received six and Odoo recorded
+                # the delivery as complete. Judge every move, not the header.
+                short = [
+                    move for move in picking.move_ids
+                    if move.state not in ("done", "cancel")
+                    and float_compare(
+                        move.reserved_availability, move.product_uom_qty,
+                        precision_rounding=move.product_uom.rounding,
+                    ) < 0
+                ]
+                if short:
+                    _logger.warning(
+                        "Leaving %s open for order %s: %s of %s lines are not fully "
+                        "reserved (%s).",
+                        picking.name, order.name, len(short), len(picking.move_ids),
+                        ", ".join(m.product_id.display_name for m in short),
+                    )
+                    skipped.append(picking.name)
+                    continue
+
                 try:
                     # Without a quantity done, button_validate returns the
                     # Immediate Transfer wizard instead of completing, which
@@ -60,10 +86,13 @@ class SaleOrder(models.Model):
                     for line in picking.move_line_ids:
                         line.qty_done = line.reserved_uom_qty
 
+                    # No skip_backorder here. It does not skip a dialog, it
+                    # cancels whatever was not picked - which is what silently
+                    # dropped those lines. Nothing should be short by this
+                    # point, and if anything is, Odoo leaving a backorder is
+                    # the outcome we want.
                     picking.with_context(
                         skip_delivery_email=True,
-                        skip_backorder=True,
-                        picking_ids_not_to_backorder=picking.ids,
                     ).button_validate()
                 except Exception as exc:
                     _logger.warning(
