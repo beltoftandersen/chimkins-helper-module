@@ -15,7 +15,7 @@ class PaymentRegister(models.Model):
     custom_payment_ref = fields.Char(string="Payment ref.")
 
     @api.model
-    def register_payment(self, invoice_id, journal_id, payment_ref=None, payment_date=None):
+    def register_payment(self, invoice_id, journal_id, payment_ref=None, payment_date=None, amount=None):
         try:
             invoice = self.env['account.move'].browse(invoice_id)
             if not invoice.exists():
@@ -39,6 +39,24 @@ class PaymentRegister(models.Model):
             if payment_date:
                 payment_register_vals['payment_date'] = payment_date
                 _logger.info(f"Using payment date: {payment_date}")
+
+            if amount is not None:
+                amount = float(amount)
+                if amount <= 0:
+                    raise UserError(f"Refusing to register a payment of {amount}.")
+                residual = abs(invoice.amount_residual)
+                if amount > residual + 0.005:
+                    raise UserError(
+                        f"Payment of {amount} exceeds the {residual} still open on "
+                        f"{invoice.name}."
+                    )
+                payment_register_vals['amount'] = amount
+                if amount < residual - 0.005:
+                    # A gift card pays part of an invoice and the customer's own
+                    # payment method pays the rest, so the invoice must stay open
+                    # for the second payment rather than be written down here.
+                    payment_register_vals['payment_difference_handling'] = 'open'
+                _logger.info(f"Registering a partial payment of {amount} of {residual}")
 
             if hasattr(self.env['account.payment.register'], 'custom_payment_ref') and payment_ref:
                 payment_register_vals['custom_payment_ref'] = payment_ref
