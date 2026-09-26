@@ -6,6 +6,14 @@ import logging
 
 _logger = logging.getLogger(__name__)
 
+# One cent of rounding, plus the half-cent epsilon the comparison already
+# carried. An amount that is only this far over the residual is a rounding
+# difference, not an overpayment: the middleware sends WooCommerce's gross
+# coupon figure while the residual is Odoo recomputing VAT from the net that
+# was added back, and on a dashboard that books orders ex-tax the two land a
+# cent apart. Anything larger is a real discrepancy and still refused.
+ROUNDING_TOLERANCE = 0.015
+
 class PaymentRegister(models.Model):
     _name = 'payment.register'
     _description = 'Payment Register'
@@ -45,11 +53,23 @@ class PaymentRegister(models.Model):
                 if amount <= 0:
                     raise UserError(f"Refusing to register a payment of {amount}.")
                 residual = abs(invoice.amount_residual)
-                if amount > residual + 0.005:
+                if amount > residual + ROUNDING_TOLERANCE:
                     raise UserError(
                         f"Payment of {amount} exceeds the {residual} still open on "
                         f"{invoice.name}."
                     )
+                if amount > residual:
+                    # Clamped rather than refused. Raising here failed the whole
+                    # gift card payment over a cent, and since the middleware
+                    # recomputes the same figures on every retry the order then
+                    # errored the same way for ever. Bringing the amount down to
+                    # the residual settles the invoice exactly.
+                    _logger.info(
+                        "Payment of %s is %s over the %s open on %s; clamping it to "
+                        "the residual as a rounding difference.",
+                        amount, amount - residual, residual, invoice.name,
+                    )
+                    amount = residual
                 payment_register_vals['amount'] = amount
                 if amount < residual - 0.005:
                     # A gift card pays part of an invoice and the customer's own
