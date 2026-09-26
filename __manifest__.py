@@ -11,12 +11,13 @@
     'author': "Chimkins IT",
     'website': "https://chimkins.com",
     'category': 'Technical',
-    'version': '1.1',
+    'version': '1.2',
 
     'depends': ['base', 'product', 'sale', 'stock'],
     'data': [
         'views/fields.xml',
         'views/payment_ref.xml',
+        'views/search.xml',
     ],
 
     'installable': True,

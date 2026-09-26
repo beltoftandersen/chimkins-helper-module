@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <data>
+        <!-- Typing an order number (MT_191350, or just 191350) in the search
+             bar offers "Search WooCommerce Order ID for: ..." directly. -->
+        <record id="view_sales_order_filter_inherit_woocommerce" model="ir.ui.view">
+            <field name="name">sale.order.search.woocommerce</field>
+            <field name="model">sale.order</field>
+            <field name="inherit_id" ref="sale.view_sales_order_filter"/>
+            <field name="arch" type="xml">
+                <xpath expr="//field[@name='name']" position="after">
+                    <field name="woocommerce_order_id"/>
+                </xpath>
+            </field>
+        </record>
+        <record id="view_account_invoice_filter_inherit_woocommerce" model="ir.ui.view">
+            <field name="name">account.invoice.search.woocommerce</field>
+            <field name="model">account.move</field>
+            <field name="inherit_id" ref="account.view_account_invoice_filter"/>
+            <field name="arch" type="xml">
+                <xpath expr="//field[@name='name']" position="after">
+                    <field name="woocommerce_order_id"/>
+                </xpath>
+            </field>
+        </record>
+    </data>
+</odoo>
